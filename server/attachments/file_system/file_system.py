@@ -24,7 +24,7 @@ class FileSystemAttachments(BaseAttachments):
 
     def create(self, file: UploadFile) -> AttachmentCreateResponse:
         """Create a new attachment."""
-        is_valid_filename(file.filename)
+        is_valid_filename(file.filename, subdirs=False)
         try:
             self._save_file(file)
         except FileExistsError:
@@ -36,7 +36,7 @@ class FileSystemAttachments(BaseAttachments):
 
     def get(self, filename: str) -> FileResponse:
         """Get a specific attachment."""
-        is_valid_filename(filename)
+        is_valid_filename(filename, subdirs=False)
         filepath = os.path.join(self.storage_path, filename)
         if not os.path.isfile(filepath):
             raise FileNotFoundError(f"'{filename}' not found.")

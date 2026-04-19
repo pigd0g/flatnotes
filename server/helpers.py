@@ -13,15 +13,34 @@ def camel_case(snake_case_str: str) -> str:
     return parts[0] + "".join(part.title() for part in parts[1:])
 
 
-def is_valid_filename(value):
+_subdirs_enabled = False
+
+
+def set_subdirs_enabled(value: bool):
+    global _subdirs_enabled
+    _subdirs_enabled = value
+
+
+def is_valid_filename(value, subdirs=None):
     """Raise ValueError if the declared string contains any of the following
-    characters: <>:"/\\|?*"""
-    invalid_chars = r'<>:"/\|?*'
+    characters: <>:"\\|?* (or <>:"/\\|?* when subdirs is False) or attempts
+    path traversal."""
+    if subdirs is None:
+        subdirs = _subdirs_enabled
+    if subdirs:
+        invalid_chars = r'<>:"\|?*'
+    else:
+        invalid_chars = r'<>:"/\|?*'
     if any(invalid_char in value for invalid_char in invalid_chars):
         raise ValueError(
             "title cannot include any of the following characters: "
             + invalid_chars
         )
+    if subdirs:
+        if ".." in value.split("/") or ".." in value.split(os.sep):
+            raise ValueError("title cannot contain path traversal sequences")
+        if os.path.isabs(value):
+            raise ValueError("title cannot be an absolute path")
     return value
 
 

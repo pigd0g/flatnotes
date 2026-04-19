@@ -26,13 +26,15 @@ app = FastAPI(
 )
 replace_base_href("client/dist/index.html", global_config.path_prefix)
 
+_title_path = "{title:path}" if global_config.subdirs else "{title}"
+
 
 # region UI
 @router.get("/", include_in_schema=False)
 @router.get("/login", include_in_schema=False)
 @router.get("/search", include_in_schema=False)
 @router.get("/new", include_in_schema=False)
-@router.get("/note/{title}", include_in_schema=False)
+@router.get(f"/note/{_title_path}", include_in_schema=False)
 def root(title: str = ""):
     with open("client/dist/index.html", "r", encoding="utf-8") as f:
         html = f.read()
@@ -68,7 +70,7 @@ def auth_check() -> str:
 # region Notes
 # Get Note
 @router.get(
-    "/api/notes/{title}",
+    f"/api/notes/{_title_path}",
     dependencies=auth_deps,
     response_model=Note,
 )
@@ -108,7 +110,7 @@ if global_config.auth_type != AuthType.READ_ONLY:
 
     # Update Note
     @router.patch(
-        "/api/notes/{title}",
+        f"/api/notes/{_title_path}",
         dependencies=auth_deps,
         response_model=Note,
     )
@@ -129,7 +131,7 @@ if global_config.auth_type != AuthType.READ_ONLY:
 
     # Delete Note
     @router.delete(
-        "/api/notes/{title}",
+        f"/api/notes/{_title_path}",
         dependencies=auth_deps,
         response_model=None,
     )
@@ -185,6 +187,7 @@ def get_config():
     """Retrieve server-side config required for the UI."""
     return GlobalConfigResponseModel(
         auth_type=global_config.auth_type,
+        subdirs=global_config.subdirs,
         quick_access_hide=global_config.quick_access_hide,
         quick_access_title=global_config.quick_access_title,
         quick_access_term=global_config.quick_access_term,

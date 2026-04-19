@@ -18,14 +18,16 @@ from whoosh.query import Every
 from whoosh.searching import Hit
 from whoosh.support.charset import accent_map
 
-from helpers import get_env, is_valid_filename
+from helpers import _subdirs_enabled, get_env, is_valid_filename
 from logger import logger
 
 from ..base import BaseNotes
 from ..models import Note, NoteCreate, NoteUpdate, SearchResult
 
 MARKDOWN_EXT = ".md"
-INDEX_SCHEMA_VERSION = "5"
+
+def _get_index_schema_version():
+    return "6" if _subdirs_enabled else "5"
 
 StemmingFoldingAnalyzer = StemmingAnalyzer() | CharsetFilter(accent_map)
 
@@ -58,7 +60,9 @@ class FileSystemNotes(BaseNotes):
 
     def create(self, data: NoteCreate) -> Note:
         """Create a new note."""
-        filepath = self._path_from_title(data.title)
+        filepath = self._safe_path(data.title)
+        if _subdirs_enabled:
+            os.makedirs(os.path.dirname(filepath), exist_ok=True)
         self._write_file(filepath, data.content)
         return Note(
             title=data.title,
@@ -69,7 +73,7 @@ class FileSystemNotes(BaseNotes):
     def get(self, title: str) -> Note:
         """Get a specific note."""
         is_valid_filename(title)
-        filepath = self._path_from_title(title)
+        filepath = self._safe_path(title)
         content = self._read_file(filepath)
         return Note(
             title=title,
@@ -80,13 +84,15 @@ class FileSystemNotes(BaseNotes):
     def update(self, title: str, data: NoteUpdate) -> Note:
         """Update a specific note."""
         is_valid_filename(title)
-        filepath = self._path_from_title(title)
+        filepath = self._safe_path(title)
         if data.new_title is not None:
-            new_filepath = self._path_from_title(data.new_title)
+            new_filepath = self._safe_path(data.new_title)
             if filepath != new_filepath and os.path.isfile(new_filepath):
                 raise FileExistsError(
                     f"Failed to rename. '{data.new_title}' already exists."
                 )
+            if _subdirs_enabled:
+                os.makedirs(os.path.dirname(new_filepath), exist_ok=True)
             os.rename(filepath, new_filepath)
             title = data.new_title
             filepath = new_filepath
@@ -104,8 +110,15 @@ class FileSystemNotes(BaseNotes):
     def delete(self, title: str) -> None:
         """Delete a specific note."""
         is_valid_filename(title)
-        filepath = self._path_from_title(title)
+        filepath = self._safe_path(title)
         os.remove(filepath)
+        if _subdirs_enabled:
+            parent = os.path.dirname(filepath)
+            while parent != self.storage_path and os.path.isdir(parent):
+                if os.listdir(parent):
+                    break
+                os.rmdir(parent)
+                parent = os.path.dirname(parent)
 
     def search(
         self,
@@ -166,19 +179,29 @@ class FileSystemNotes(BaseNotes):
     def _path_from_title(self, title: str) -> str:
         return os.path.join(self.storage_path, title + MARKDOWN_EXT)
 
+    def _safe_path(self, title: str) -> str:
+        filepath = self._path_from_title(title)
+        if _subdirs_enabled:
+            real_storage = os.path.realpath(self.storage_path)
+            real_filepath = os.path.realpath(filepath)
+            if not real_filepath.startswith(real_storage + os.sep) and real_filepath != real_storage:
+                raise ValueError("Path traversal detected")
+        return filepath
+
     def _get_by_filename(self, filename: str) -> Note:
         """Get a note by its filename."""
         return self.get(self._strip_ext(filename))
 
     def _load_index(self) -> Index:
         """Load the note index or create new if not exists."""
+        index_schema_version = _get_index_schema_version()
         index_dir_exists = os.path.exists(self._index_path)
         if index_dir_exists and whoosh.index.exists_in(
-            self._index_path, indexname=INDEX_SCHEMA_VERSION
+            self._index_path, indexname=index_schema_version
         ):
             logger.info("Loading existing index")
             return whoosh.index.open_dir(
-                self._index_path, indexname=INDEX_SCHEMA_VERSION
+                self._index_path, indexname=index_schema_version
             )
         else:
             if index_dir_exists:
@@ -188,7 +211,7 @@ class FileSystemNotes(BaseNotes):
                 os.mkdir(self._index_path)
             logger.info("Creating new index")
             return whoosh.index.create_in(
-                self._index_path, IndexSchema, indexname=INDEX_SCHEMA_VERSION
+                self._index_path, IndexSchema, indexname=index_schema_version
             )
 
     @classmethod
@@ -223,13 +246,22 @@ class FileSystemNotes(BaseNotes):
         )
 
     def _list_all_note_filenames(self) -> List[str]:
-        """Return a list of all note filenames."""
-        return [
-            os.path.split(filepath)[1]
-            for filepath in glob.glob(
-                os.path.join(self.storage_path, "*" + MARKDOWN_EXT)
-            )
-        ]
+        """Return a list of all note filenames (relative to storage_path)."""
+        if _subdirs_enabled:
+            return [
+                os.path.relpath(filepath, self.storage_path)
+                for filepath in glob.glob(
+                    os.path.join(self.storage_path, "**", "*" + MARKDOWN_EXT),
+                    recursive=True,
+                )
+            ]
+        else:
+            return [
+                os.path.split(filepath)[1]
+                for filepath in glob.glob(
+                    os.path.join(self.storage_path, "*" + MARKDOWN_EXT)
+                )
+            ]
 
     def _sync_index(self, optimize: bool = False, clean: bool = False) -> None:
         """Synchronize the index with the notes directory.
