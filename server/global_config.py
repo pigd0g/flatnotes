@@ -1,7 +1,7 @@
 import sys
 from enum import Enum
 
-from helpers import CustomBaseModel, get_env
+from helpers import CustomBaseModel, get_env, set_subdirs_enabled
 from logger import logger
 
 
@@ -9,6 +9,7 @@ class GlobalConfig:
     def __init__(self) -> None:
         logger.debug("Loading global config...")
         self.auth_type: AuthType = self._load_auth_type()
+        self.subdirs: bool = self._load_subdirs()
         self.quick_access_hide: bool = self._quick_access_hide()
         self.quick_access_title: str = self._quick_access_title()
         self.quick_access_term: str = self._quick_access_term()
@@ -101,6 +102,12 @@ class GlobalConfig:
             sys.exit(1)
         return value
 
+    def _load_subdirs(self):
+        key = "FLATNOTES_SUBDIRS"
+        value = get_env(key, mandatory=False, default=False, cast_bool=True)
+        set_subdirs_enabled(value)
+        return value
+
 
 class AuthType(str, Enum):
     NONE = "none"
@@ -111,6 +118,7 @@ class AuthType(str, Enum):
 
 class GlobalConfigResponseModel(CustomBaseModel):
     auth_type: AuthType
+    subdirs: bool
     quick_access_hide: bool
     quick_access_title: str
     quick_access_term: str

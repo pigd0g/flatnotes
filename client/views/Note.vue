@@ -162,7 +162,12 @@ const isDraftModalVisible = ref(false);
 const isNewNote = computed(() => !props.title);
 const loadingIndicator = ref();
 const note = ref({});
-const reservedFilenameCharacters = /[<>:"/\\|?*]/;
+const reservedFilenameCharacters = computed(() =>
+  globalStore.config.subdirs
+    ? /[<>:"\\|?*]/
+    : /[<>:"/\\|?*]/,
+);
+const attachmentFilenameCharacters = /[<>:"/\\|?*]/;
 const router = useRouter();
 const newTitle = ref();
 const toast = useToast();
@@ -263,7 +268,7 @@ function saveHandler(close = false) {
   }
 
   // Invalid Character Validation
-  if (reservedFilenameCharacters.test(newTitle.value)) {
+  if (reservedFilenameCharacters.value.test(newTitle.value)) {
     badFilenameToast("Title");
     return;
   }
@@ -375,8 +380,8 @@ function addImageBlobHook(file, callback) {
 
 function postAttachment(file) {
   // Invalid Character Validation
-  if (reservedFilenameCharacters.test(file.name)) {
-    badFilenameToast("Title");
+  if (attachmentFilenameCharacters.test(file.name)) {
+    badFilenameToast("Filename");
     return;
   }
 
@@ -494,9 +499,12 @@ function entityTooLargeToast(entityName) {
 }
 
 function badFilenameToast(entityName) {
+  const chars = globalStore.config.subdirs
+    ? '<>:"\\|?*'
+    : '<>:"/\\|?*';
   toast.add(
     getToastOptions(
-      'Due to filename restrictions, the following characters are not allowed: <>:"/\\|?*',
+      `Due to filename restrictions, the following characters are not allowed: ${chars}`,
       `Invalid ${entityName}`,
       "error",
     ),

@@ -41,6 +41,7 @@ Equally, the only thing flatnotes caches is the search index and that's incremen
 * Note "tagging" functionality.
 * Customisable home page.
 * Wikilink support to easily link to other notes (`[[My Other Note]]`).
+* Optional sub-directory support for folder-organised note collections.
 * Light/dark themes.
 * Multiple authentication options (none, read-only, username/password, 2FA).
 * Restful API.
@@ -98,6 +99,26 @@ services:
       - "8080:8080"
     restart: unless-stopped
 ```
+
+### Sub-Directory Support
+
+By default, flatnotes only indexes markdown files at the top level of the data directory. To enable support for notes stored in sub-directories (e.g. for compatibility with Obsidian-style vaults), set the `FLATNOTES_SUBDIRS` environment variable to `true`:
+
+```yaml
+FLATNOTES_SUBDIRS: "true"
+```
+
+When enabled:
+
+* Notes in sub-directories are indexed and searchable.
+* Note titles become relative paths (e.g. `Project Alpha/Notes` for a file at `Project Alpha/Notes.md`).
+* Wikilinks like `[[Project Alpha/Notes]]` resolve across directories.
+* The `/` character is allowed in note titles; empty parent directories are cleaned up on delete.
+* Path traversal attacks (e.g. `../../etc/passwd`) are blocked.
+
+When disabled (default), behaviour is unchanged from previous versions — only top-level `.md` files are visible and `/` remains an invalid character in titles.
+
+> **Note:** When enabling this feature, the search index will be rebuilt automatically to include sub-directory notes. Enabling or disabling this option requires a restart of flatnotes.
 
 See the [Environment Variables](https://github.com/dullage/flatnotes/wiki/Environment-Variables) article in the wiki for a full list of configuration options.
 
